@@ -4,41 +4,42 @@
 .code
 ;NewValue = (((OldValue - OldMin)*(NewMax-NewMin)/(OdlMax-OldMin)) + NewMin
 
+.MODEL small
+.STACK 100h  
+
+.code
+;NewValue = (((OldValue - OldMin)*(NewMax-NewMin)/(OdlMax-OldMin)) + NewMin
+
 ;Readable version:
 
 ;   OldRange = (OldMax-OldMin)     NewRange = (NewMax-NewMin)   
 ;   NewValue = (OldValue - OldMin)*NewRange/OldRange) + NewMin
-OutInt proc
-        
-   test    ax, ax
-   jns     oi1
-
-
-   mov  cx, ax
-   mov     ah, 02h
-   mov     dl, '-'
-   int     21h
-   mov  ax, cx
-   neg     ax   ;change sing
+OutInt proc    
+   test ax, ax
+   jns oi1
+   mov cx, ax
+   mov ah, 02h
+   mov dl, '-'
+   int 21h
+   mov ax, cx
+   neg ax   ;change sing
 oi1:  
-    xor     cx, cx
-    mov     bx, 10 
+   xor cx, cx
+   mov bx, 10 
 oi2:
-    xor     dx,dx
-    div     bx
-    push    dx
-    inc     cx
-    test    ax, ax
-    jnz     oi2
-    mov     ah, 02h
+   xor dx,dx
+   div bx
+   push dx
+   inc cx
+   test ax, ax
+   jnz oi2
+   mov ah, 02h
 oi3:
-    pop     dx
-    add     dl, '0'
-    int     21h
-    loop    oi3
-    
-    ret
- 
+   pop dx
+   add dl, '0'
+   int 21h
+   loop oi3 
+   ret
 OutInt endp
 
 
@@ -106,12 +107,12 @@ start:
     mov ch, 00h
     mov cl, sizeInt
     mov si, offset massInt+1  
-    mov [si], cx              
+    mov [si], cx             
     mov ax, 0900h
     mov dx, offset NumbersMessage  ;elements of array
     int 21h
     xor bp, bp
-;          Scanning numbers of array    ;    
+;************Scanning numbers of array    ;    
     EnterNumb:                
     mov ax, 0A00h
     mov dx, offset NumberCh
@@ -167,54 +168,47 @@ start:
         int 21h
         mov ax, 4C00h
 	    int 21h
-    MaxNotLess:
-    mov ax, MaxBorder
-    sub ax, MinBorder
-    mov A, ax
-    mov ax, MaxNumb
-    sub ax, MinNumb
-    mov A+2, ax      
-    mov B+2, ax      
-    mov ax, MaxBorder
-    imul A+2
-    mov bx, ax
-    mov ax, MaxNumb
-    imul A
-    sub bx, ax
-    mov B, bx
-    xor bp, bp
-    mov ch, 00h
-    mov cl, sizeInt
-    NewNumbersInt:  
+MaxNotLess:
+    mov ax, MaxBorder	;ax = 400
+    sub ax, MinBorder	;ax = 400-200 = 200
+    mov NewRange, ax	;NewRange = 200
+    mov Divide, ax	;Divide = 200
+    mov ax, MaxNumb	;ax = 5
+    sub ax, MinNumb	;ax = 5-1 = 4
+    mov OldRange, ax;OldRange = 4     
+    mov ax, NewRange
+    mov dx, 0
+    idiv OldRange
+    mov Divide, ax
+    xor bp, bp		
+    mov ch, 00h		
+    mov cl, sizeInt	
+    NewNumbersInt:  	
     mov si, offset massInt+2
-    add si, bp
-    add bp, 2h
-    mov ax, [si]
-    imul A
-    add ax, B
-    xor dx, dx
-    test ax, ax
-    jns Ifless1: 
-    mov dx, 0FFFFh    
-    Ifless1:
-    idiv A+2
-    mov [si], ax
-    mov bx, dx
-    mov ax, A+2        
-    xor dx, dx   
-    idiv double
-    inc ax
-    cmp ax, bx
-    jg Arrounding:
-        mov ax, [si]
-        inc ax
-        mov [si], ax        
-    Arrounding:
-    sub cx, 1h
-    cmp cx, 0h
-    jne NewNumbersInt: 
+    add si, bp		
+    add bp, 2h		
+    mov ax, [si]	
+    sub ax, MinNumb 
+    imul Divide
+    add ax, MinBorder
+    xor dx, dx			
+    test ax, ax		
+    mov [si], ax		
+    mov bx, dx		        
+    xor dx, dx   	
+    idiv double		
+    inc ax		    
+    cmp ax, bx		
+    jg Arrounding:	
+        mov ax, [si]	
+        inc ax		
+        mov [si], ax    
+    Arrounding:		
+    sub cx, 1h		
+    cmp cx, 0h		
+    jne NewNumbersInt: 	
     mov ax, 0900h                   
-    mov dx, offset OutPuting
+    mov dx, offset OutPuting    ;Results
     int 21h   
     
     mov double, 0h
@@ -248,15 +242,18 @@ start:
     MaxNumb dw 8000h  
     MinBorder dw ?
     MaxBorder dw ?
-    A dw ?, ?   ;Max border - min border
-    B dw ?, ?
+    
+    OldRange dw ?
+    NewRange dw ?
+    Divide dw ?
+    
     dexs dw 10 
     double dw 2h
-    OverFlowed db 0Ah, 0Dh, "Register OverFlowed", '$'
+    OverFlowed db 0Ah, 0Dh, "OverFlow, watch out input", '$'
     CountMessage db "Enter amount of numbers", 0Ah, 0Dh, '$'
-    NumbersMessage db 0Ah, 0Dh, "Enter elements of array:", 0Ah, 0Dh, '$'
-    MinBorderMess db 0Ah, 0Dh, "Enter your Minimal border", 0Ah, 0Dh, '$'
-    MaxBorderMess db 0Ah, 0Dh, "Enter your Maximal border", 0Ah, 0Dh, '$'
+    NumbersMessage db 0Ah, 0Dh, "Enter elements:", 0Ah, 0Dh, '$'
+    MinBorderMess db 0Ah, 0Dh, "Enter Minimal border", 0Ah, 0Dh, '$'
+    MaxBorderMess db 0Ah, 0Dh, "Enter Maximal border", 0Ah, 0Dh, '$'
     MaxLessMin db 0Ah, 0Dh, "Max Border Cannot be less then Min Border" , 0Ah, 0Dh, '$' 
     OutPuting db 0Ah, 0Dh, "That is a result" , 0Ah, 0Dh, '$' 
     NewString db 0Ah, 0Dh, '$'
