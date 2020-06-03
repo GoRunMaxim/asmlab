@@ -641,6 +641,6 @@ main:
 	call toString
 	printStr numberBuffer
 	printLn
-	
-	int 20h
+	mov ax,4C00h
+    	int 21h
 end main
