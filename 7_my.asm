@@ -1,260 +1,230 @@
-.286
-.model      small
-.stack      100h
-
+.model small
+.stack 100h
 .data
-    startMessage      db "CONSOLE PARAMETERS: ", '$'
-    applicationError  db "APPLICATION START ERROR!", '$'
-    negativeExit      db "ENTER CORRECT NUMBER!", '$'
-    allocatingError   db "ALLOCATING MEMORY ERROR!", '$'
-    badArguments      db "BAD ARGUMENTS ERROR!", 0dh, 0ah, '$'
-    fileError         db "ERROR OPENING FILE!", '$'
-    badFileName       db "BAD FILE NAME!", '$'
+sumbl db 1 dup(0)
+argc dw 0
+maxcmdsize equ 125
+cmd_length dw ?
+cmd_line db maxcmdsize+2,?,maxcmdsize dup(?)
+buf db maxcmdsize+2,?,maxcmdsize dup('$')  
+filename db 126 dup("$")
+progname db 126 dup("$")
+StringNumber db 0 
+localsize db 0
+StringFileOpenMsg db "File was opened ", 13,10, "$"
+StringFileCloseMsg db "File was closed ", 13,10, "$"
+StringErrorComandLineMsg db "Comand Line Error size",13,10,"$"
+StringFileErrorOpenMsg db "File Error Open", 13,10, "$"
+StringFileErrorCloseMsg db "File Error Close", 13,10, "$"
+StringErrorAllocatedMsg db "Error allocated memory", 13,10, "$"
+StringErrorStartMsg db "Error start other program", 13,10, "$"
+StringErrorCMDMsg db "CMD line is empty", 13,10,"$"
+StringBeginMsg db "The program has begun ", 13,10, "$"
+StringErrorParsMsg db "Error pars params in comand line",13,10,"$" 
+StringErrorOwerflowMsg db "Error Owerflow of size: size your entered bigger then 255",13,10,"$"
+StringEndMsg db "The program has end ", 13,10, "$"
+StringNewStr db 13,10,"$"
 
-    partSize          equ 256
-    wasPreviousLetter dw 0
-    path              db 256 dup('$')
-    tempVariable      dw 0
-    isEndl            db 0
-    spacePos          dw 0
-    base              dw 10
-    iterations        dw 0
-    stringNumber      dw 0
-    parsingStep       dw 1
-    endl              db 13, 10, '$'
 
-    tempString        db 256 dup('$')
-    applicationName   db 256 dup(0)                 ;name of l5.exe
-    part              db partSize dup('$')
+EPB dw 0
+    dw offset line,0
+    dw 005Ch,0,006Ch,0
+line db 125
+     db "/?"
+command_text db 122 dup(?)
+dsize=$-sumbl         
     
-    ;Exec Parameter Block (EPB) for funcion 4Bh
-    env               dw 0
-
-    dsize=$-startMessage          ;size of data segment 
 .code
+Print_str macro msg
+    push ax
+    push dx
+    mov ah,9
+    mov dx,offset msg
+    int 21h
+    pop dx
+    pop ax
+endm 
 
-;printing string
-printString proc  
-    push    bp
-    mov     bp, sp   
-    pusha 
-    mov     dx, [ss:bp+4+0]     
-    mov     ax, 0900h
-    int     21h 
-    mov     dx, offset endl
-    mov     ax, 0900h
-    int     21h  
-    popa
-    pop     bp      
-    ret 
-endp
-
-;output string
-puts proc
-    mov     ah, 9
-    int     21h
+Makeparams proc
+    push si
+    push di
+    push dx
+    push cx
+    push bx
+    xor si,si
+    xor di,di   
+sravn:    
+    cmp cmd_line[si],' '
+    jne nextstep
+    call SkipSpaces
+    inc argc
+    cmp argc,2
+    je second
+    cmp argc,3
+    je forth
+nextstep:
+    mov dl,cmd_line[si]
+    mov buf[di],dl
+    inc di
+    inc si
+    xor dx,dx
+    mov dx,cmd_length
+    cmp si,dx
+    jne sravn
+    jmp forth 
+second:
+    mov cx,di
+    xor di,di
+secondcycle:
+    xor dx,dx
+    mov dl,buf[di]
+    mov filename[di],dl
+    mov buf[di],"$"
+    inc di
+    loop secondcycle
+    mov filename[di],0
+    xor di,di
+    jmp sravn
+forth:
+    mov cx,di
+    xor di,di
+forthcycle:
+    cmp buf[di],30h
+    jl ErrorEnded2
+    cmp buf[di],39h
+    jg ErrorEnded2
+    push ax
+    xor ax,ax
+    mov al,StringNumber
+    mul bx
+    mov StringNumber,al
+    pop ax
+    jc ErrorEnded1
+    push ax
+    xor ax,ax
+    mov al,buf[di]
+    sub al,30h
+    add StringNumber,al
+    pop ax
+    jc ErrorEnded1
+    inc di
+    loop forthcycle    
+    jmp EndMakeparams    
+ErrorEnded1:
+    pop cx
+    Print_str StringErrorOwerflowMsg
+    jmp ErrorEnds        
+ErrorEnded2:
+    Print_str StringErrorParsMsg
+ErrorEnds:
+    pop bx
+    pop cx    
+    pop dx    
+    pop si
+    pop di
+    jmp Exit                      
+EndMakeparams:
+    pop bx
+    pop cx    
+    pop dx    
+    pop si
+    pop di
     ret
-endp
+Makeparams endp  
+    
+SkipSpaces proc
+SkipCycle:    
+    cmp cmd_line[si],' '
+    je skip
+    jmp EndSkip
+skip:
+    inc si
+    jmp SkipCycle
+EndSkip:    
+    ret
+SkipSpaces endp    
 
-exit proc
-    mov     ax, 4c00h
-    int     21h
-endp
+start:
+    mov ah,4Ah
+    mov bx,((csize/16)+1)+256/16+((dsize/16)+1)+256/16
+    int 21h
+    jc  ErrorExit0
+    mov ax, @data
+    mov es, ax
+    
+    xor cx,cx
+    mov cl,ds:[80h]
+    mov bx,cx
+    mov si,81h
+    mov di,offset cmd_line
+    rep movsb
+    
+    mov ds,ax
+    Print_str StringBeginMsg
+    mov cmd_length,bx
+    cmp cmd_length,0
+    je  ErrorExit00
 
-;bad range
+    call Makeparams    
+    
+    push cx
+    xor cx,cx
+    mov cl, StringNumber
+    xor ax, ax
+    mov ax, cx
+    cmp ax, 255
+    jg  badRange
+    cmp ax, 0
+    je badRange
+
+MakeCycle:    
+    call Run
+	loop MakeCycle
+    jmp Exit
 badRange:
-    lea     dx, negativeExit
-    call    puts
-    call    exit
+    Print_str StringErrorOwerflowMsg  
+    jmp    Exit
 ret
 
-;convert to int
-toInteger proc
-    pusha        
-    xor     di, di
-    lea     di, path 
-    xor     bx, bx     
-    xor     ax, ax   
-    xor     cx, cx
-    xor     dx, dx
-    mov     bx, spacePos
-    
-    skipSpacesInteger:
-        cmp     [di + bx], byte ptr ' '
-        jne     unskippingInteger
-        inc     bx
-        jmp     skipSpacesInteger
-    
-    unskippingInteger:
-        cmp     [di + bx], byte ptr '-'
-        jne     atoiLoop
-        jmp     atoiError
+ErrorExit00: 
+    Print_str StringErrorCMDMsg
+    jmp Exit        
+ErrorExit0:
+    Print_str StringErrorAllocatedMsg
+    jmp Exit    
+ErrorExit1:    
+    Print_str StringErrorComandLineMsg
+    jmp Exit
+ErrorExit2:
+    Print_str StringFileErrorOpenMsg
+    jmp Exit
+ErrorExit3:
+    Print_str StringFileErrorCloseMsg
+    jmp Exit
+ErrorExit4:
+    Print_str StringErrorStartMsg               
+Exit:
+    Print_str StringEndMsg    
+    mov ax, 4c00h
+    int 21h
 
-    atoiLoop:        
-        cmp     [di + bx], byte ptr '0'    
-        jb      atoiError  
-        cmp     [di + bx], byte ptr '9'    
-        ja      atoiError                     
-        mul     base            ;mul 10
-        mov     dl, [di + bx] 
-        jo      atoiError 
-        sub     ax, '0'  
-        jo      atoiError
-        add     ax, dx 
-        inc     bx 
-        cmp     [di + bx], byte ptr ' '
-        jne     atoiLoop  
-        jmp     atoiEnd 
-    
-    atoiError:
-        jmp     badRange
-
-    atoiEnd: 
-        mov     tempVariable, ax 
-        mov     spacePos, bx
-        inc     parsingStep
-        cmp     tempVariable, 255
-        jg      badRange
-        cmp     tempVariable, 0
-        je      badRange
-        popa
-        ret
-endp
-
-;app error
-applicationStartError:
-    lea     dx, applicationError
-    call    puts
-    call    exit
-ret
-
-;memory allocating
-allocateMemory proc
-    push    ax
-    push    bx 
-    mov     bx, ((csize/16)+1)+256/16+((dsize/16)+1)+256/16
-    mov     ah, 4Ah
-    int     21h 
-    jc      allocateMemoryError
-    jmp     allocateMemoryEnd 
-    allocateMemoryError:
-        lea     dx, allocatingError
-        call    puts
-        call    exit    
-    allocateMemoryEnd:
-        pop     bx
-        pop     ax
-        ret
-endp
-
-;get iterations
-getIterations proc
-    pusha
-    xor     ax, ax
-    call    toInteger
-    mov     ax, tempVariable
-    mov     iterations, ax
-    popa
-    ret
-endp
-
-;load and run application
-loadAndRun proc
-    mov     ax, 4B00h      ;load and execute
-    lea     dx, applicationName
-    lea     bx, env
+Run proc
+    mov     ax, 4B00h
+    lea     dx, filename
+    lea     bx, EPB
     int     21h
-    jb      applicationStartError
+    jc ErrorExit4 
     ret
-endp
+Run endp
 
-;get file name
-getFilename proc
-    pusha
-    lea     di, path 
-    xor     bx, bx     
-    xor     ax, ax   
-    mov     bx, spacePos
-    skipSpacesString:
-        cmp     [di + bx], byte ptr ' '
-        jne     unskippingString
-        inc     bx
-        jmp     skipSpacesString
-    unskippingString:
-        lea si, applicationName
-    copyFilename:
-        xor     ax, ax
-        mov     al, [di + bx] 
-        mov     [si], al
-        inc     bx
-        inc     si
-        cmp     [di + bx], byte ptr '$'
-        jne     copyFilename
-        mov     spacePos, bx
-        popa
-        ret
-endp
-
-;bad arguments call
-badArgumentsCall:
-    lea     dx, badArguments
-    call    puts
-    call    exit
-ret
-
-;start
-start proc
-    call    allocateMemory
-    mov     ax, @data        ;move data segment address in DS
-    mov     ds, ax
-    mov     bl, es:[80h]     ;length of com line
-    add     bx, 80h          ;args line last (call kernel)   
-    mov     si, 82h          ;args line start
-    mov     di, offset path
-    cmp     si, bx
-    ja      badArgumentsCall
-    getPath:
-        mov     al, es:[si]
-        mov     [di], al
-        cmp     BYTE PTR es:[si], byte ptr ' '
-        jne     getNextCharacter
-        cmp     wasPreviousLetter, 0
-        je      skipCurrentSymbol
-        mov     wasPreviousLetter, 0
-        cmp     parsingStep, 1
-        jne     stepThree
-        call    getIterations
-        jmp     skipCurrentSymbol
-        ;stepTwo:
-        ;    call    getStringNumber
-        ;    jmp     skipCurrentSymbol
-        stepThree:
-            call    getFilename
-            jmp     main
-        getNextCharacter:
-            mov     wasPreviousLetter, 1
-        skipCurrentSymbol:
-            inc     di
-            inc     si
-            cmp     si, bx
-            jg      stepThree
-    jbe getPath
-    
-    main:
-        lea     dx, startMessage
-        call    puts
-        lea     ax, path 
-        push    ax
-        call    printString  
-        pop     ax
-        xor cx, cx
-        mov cx, iterations
-        startApps:
-            call    loadAndRun
-            loop    startApps
-            call exit
-endp
-
-csize = $ - printString
-
+Ended proc
+    mov ah,3Eh
+    int 21h
+    jc ErrorExit3 
+    Print_str StringNewStr
+    Print_str StringFileCloseMsg
+    ret
+Ended endp
+        
+csize=$-Makeparams    
 end start
