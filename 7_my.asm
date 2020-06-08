@@ -27,8 +27,6 @@ StringNewStr db 13,10,"$"
 
 
 EPB dw 0
-    dw offset line,0
-    dw 005Ch,0,006Ch,0
 line db 125
      db "/?"
 command_text db 122 dup(?)
